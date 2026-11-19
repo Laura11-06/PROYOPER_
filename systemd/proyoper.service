@@ -1,0 +1,18 @@
+[Unit]
+Description=Servidor Remoto y Monitor de Recursos - Sistemas Operativos
+After=network.target
+
+[Service]
+Type=simple
+User=proyoper
+Group=proyoper
+WorkingDirectory=/opt/proyoper
+ExecStart=/opt/proyoper/serverOper
+Restart=on-failure
+RestartSec=5
+# Crea /var/log/proyoper con dueño "proyoper" (ahí escribe el .log de auditoría)
+LogsDirectory=proyoper
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
