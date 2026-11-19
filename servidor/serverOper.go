@@ -59,8 +59,6 @@ var comandosInteractivos = map[string]bool{
 	"htop": true, "less": true, "more": true,
 }
 
-var errLineaLarga = errors.New("trama demasiado larga")
-
 // auditor registra todo en el .log (o en stdout si el archivo no es utilizable).
 var auditor = log.New(os.Stdout, "", log.LstdFlags)
 
