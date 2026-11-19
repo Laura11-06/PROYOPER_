@@ -54,7 +54,7 @@ const (
 )
 
 // Comandos interactivos que necesitan TTY y bloquearían la sesión.
-var comandosBloqueados = map[string]bool{
+var comandosInteractivos = map[string]bool{
 	"nano": true, "vim": true, "vi": true, "top": true,
 	"htop": true, "less": true, "more": true,
 }
@@ -82,9 +82,18 @@ type ConfigServer struct {
 	MaxAttempts int
 	UsersDB     string
 	LogFile     string
+	Blacklist   map[string]bool
 }
 
 func configPorDefecto() ConfigServer {
+	bl := map[string]bool{
+		"rm": true, "mkfs": true, "dd": true, "shutdown": true,
+		"reboot": true, "init": true, "halt": true, "poweroff": true,
+		"passwd": true, "su": true, "sudo": true, "kill": true, "killall": true,
+	}
+	for k, v := range comandosInteractivos {
+		bl[k] = v
+	}
 	return ConfigServer{
 		Puerto:      puertoPorDefecto,
 		AllowIPs:    []string{"*"},
@@ -92,6 +101,7 @@ func configPorDefecto() ConfigServer {
 		MaxAttempts: 3,
 		UsersDB:     rutaUsersRespaldo,
 		LogFile:     "../config_etc/proyOper.log",
+		Blacklist:   bl,
 	}
 }
 
@@ -151,6 +161,15 @@ func cargarConfiguracion() (ConfigServer, string) {
 			if valor != "" {
 				cfg.LogFile = valor
 			}
+		case "blacklist":
+			nuevaBL := make(map[string]bool)
+			for k, v := range comandosInteractivos {
+				nuevaBL[k] = v
+			}
+			for _, item := range listaCSV(valor) {
+				nuevaBL[filepath.Base(item)] = true
+			}
+			cfg.Blacklist = nuevaBL
 		}
 	}
 	// Rutas absolutas: así no dependen del directorio de trabajo.
@@ -325,6 +344,7 @@ type sesion struct {
 	ip       string
 	ipLocal  string
 	cwd      string // directorio de trabajo de ESTA sesión (solo lo usa recMensajeS)
+	cfg      ConfigServer
 }
 
 func (s *sesion) cerrar() { s.once.Do(func() { close(s.done) }) }
@@ -386,6 +406,7 @@ func manejarCliente(conn net.Conn, cfg ConfigServer, registro *registroIP) {
 		ip:       ip,
 		ipLocal:  ipLocal,
 		cwd:      dirInicial,
+		cfg:      cfg,
 	}
 	if err := s.enviar("AUTH_OK|" + s.prompt() + "\n"); err != nil {
 		logf("ERROR enviando AUTH_OK usuario=%q ip=%s: %v", usuario, ip, err)
@@ -696,9 +717,12 @@ func (s *sesion) ejecutarComando(comando string) string {
 			continue
 		}
 		base := filepath.Base(campos[0])
-		if comandosBloqueados[base] {
+		if s.cfg.Blacklist[base] {
 			logf("CMD_BLOQUEADO usuario=%q ip=%s cmd=%q", s.usuario, s.ip, base)
-			return fmt.Sprintf("[BLOQUEADO] '%s' es interactivo y requiere TTY; no está soportado en esta shell remota.", base)
+			if comandosInteractivos[base] {
+				return fmt.Sprintf("[BLOQUEADO] '%s' es interactivo y requiere TTY; no está soportado en esta shell remota.", base)
+			}
+			return fmt.Sprintf("[BLOQUEADO] El comando '%s' está prohibido por la lista negra del servidor.", base)
 		}
 	}
 
